@@ -18,35 +18,53 @@ function App() {
       recognitionRef.current.lang = 'en-US';
 
       recognitionRef.current.onresult = (event) => {
-        const lastResult = event.results[event.results.length - 1];
-        const transcript = lastResult[0].transcript.trim().toLowerCase();
-        setTranscript(transcript);
-        
-        const spokenWords = transcript.split(' ');
-        const lastSpokenWord = spokenWords[spokenWords.length - 1];
-        
-        // Find the next matching word, allowing for partial matches
-        const nextWordIndex = words.findIndex((word, index) => {
-          if (index <= currentWordIndex) return false;
-          const cleanWord = word.toLowerCase().replace(/[.,!?;]/, '');
-          return cleanWord.includes(lastSpokenWord) || lastSpokenWord.includes(cleanWord);
-        });
+        let finalTranscript = '';
+        let interimTranscript = '';
 
-        if (nextWordIndex !== -1) {
-          setCurrentWordIndex(nextWordIndex);
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript.trim().toLowerCase();
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        const currentTranscript = (finalTranscript || interimTranscript).toLowerCase();
+        setTranscript(currentTranscript);
+
+        // Split the transcript into words and find the last word
+        const spokenWords = currentTranscript.split(/\s+/);
+        const lastSpokenWord = spokenWords[spokenWords.length - 1];
+
+        if (lastSpokenWord) {
+          // Look for the next matching word in the text
+          for (let i = Math.max(0, currentWordIndex); i < words.length; i++) {
+            const cleanWord = words[i].toLowerCase().replace(/[.,!?;:"']/g, '');
+            if (cleanWord.includes(lastSpokenWord) || lastSpokenWord.includes(cleanWord)) {
+              setCurrentWordIndex(i);
+              break;
+            }
+          }
         }
       };
 
       recognitionRef.current.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          alert('Please enable microphone access to use speech recognition.');
+        }
         setIsListening(false);
       };
 
       recognitionRef.current.onend = () => {
         if (isListening) {
+          // Automatically restart if we're still supposed to be listening
           recognitionRef.current?.start();
         }
       };
+    } else {
+      alert('Speech recognition is not supported in your browser. Please use Chrome or Edge.');
     }
 
     return () => {
@@ -133,13 +151,13 @@ function App() {
 
           <div className="bg-gray-50 p-6 rounded-lg">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Reading Area</h2>
-            <div className="prose max-w-none">
+            <div className="prose max-w-none text-lg leading-relaxed">
               {words.map((word, index) => (
                 <span
                   key={index}
                   className={`inline-block mr-1 px-1 rounded transition-colors ${
                     index === currentWordIndex
-                      ? 'bg-purple-200 text-purple-800'
+                      ? 'bg-purple-200 text-purple-800 font-medium'
                       : index < currentWordIndex
                       ? 'text-gray-400'
                       : 'text-gray-800'
